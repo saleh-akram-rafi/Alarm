@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">Discipline Alarm</string>
+    <string name="alarm_channel_name">Discipline Alarm Notifications</string>
+    <string name="alarm_channel_description">High priority alarm notifications requiring mission scan to dismiss.</string>
+    <string name="action_scan_mission">Scan Mission</string>
+    <string name="action_snooze">Snooze</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="wake_up">WAKE UP</string>
+    <string name="mission_required">MISSION REQUIRED</string>
+    <string name="place_object_in_frame">Align registered object inside the scanner frame</string>
+    <string name="verifying">Analyzing live image...</string>
+    <string name="mission_verified">Mission Verified!</string>
+    <string name="mission_failed">Mission Failed</string>
+    <string name="try_again">Try Again</string>
+    <string name="good_night">Good Night</string>
+    <string name="next_alarm">Next Alarm</string>
+    <string name="no_active_alarm">No Active Alarm</string>
+</resources>

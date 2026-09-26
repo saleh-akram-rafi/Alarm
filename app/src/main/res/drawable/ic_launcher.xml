@@ -1,0 +1,34 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF0D0F14"
+        android:pathData="M0,0h108v108h-108z"/>
+    <!-- Alarm Clock Body -->
+    <path
+        android:fillColor="#FFFF5722"
+        android:pathData="M54,30 C39.64,30 28,41.64 28,56 C28,70.36 39.64,82 54,82 C68.36,82 80,70.36 80,56 C80,41.64 68.36,30 54,30 Z"/>
+    <!-- Inner Face -->
+    <path
+        android:fillColor="#FF161A22"
+        android:pathData="M54,36 C42.95,36 34,44.95 34,56 C34,67.05 42.95,76 54,76 C65.05,76 74,67.05 74,56 C74,44.95 65.05,36 54,36 Z"/>
+    <!-- Clock Hands -->
+    <path
+        android:strokeColor="#FFFFB300"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,56 L54,44 M54,56 L64,56"/>
+    <!-- Center Dot -->
+    <path
+        android:fillColor="#FFFFB300"
+        android:pathData="M54,53 A3,3 0 1 0 54,59 A3,3 0 1 0 54,53 Z"/>
+    <!-- Alarm Bells Left and Right -->
+    <path
+        android:fillColor="#FFFFB300"
+        android:pathData="M31.2,25.5 L24.5,32.2 C23.7,31.4 23,30.5 22.4,29.5 L29.1,22.8 C29.8,23.7 30.5,24.6 31.2,25.5 Z"/>
+    <path
+        android:fillColor="#FFFFB300"
+        android:pathData="M76.8,25.5 C77.5,24.6 78.2,23.7 78.9,22.8 L85.6,29.5 C85,30.5 84.3,31.4 83.5,32.2 L76.8,25.5 Z"/>
+</vector>
