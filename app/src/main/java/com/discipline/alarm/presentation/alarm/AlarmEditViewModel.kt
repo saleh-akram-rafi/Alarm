@@ -37,6 +37,7 @@ data class AlarmEditState(
     val threshold: Float = 0.75f,
     val vibrate: Boolean = true,
     val volume: Float = 1.0f,
+    val isPreviewPlaying: Boolean = false,
     val isEditMode: Boolean = false,
     val isLoading: Boolean = false,
     val isInitialized: Boolean = false
@@ -47,6 +48,8 @@ class AlarmEditViewModel @Inject constructor(
     private val getAlarmByIdUseCase: GetAlarmByIdUseCase,
     private val scheduleAlarmUseCase: ScheduleAlarmUseCase,
     private val deleteAlarmUseCase: DeleteAlarmUseCase,
+    private val fileStorageManager: com.discipline.alarm.util.FileStorageManager,
+    private val alarmAudioPlayer: com.discipline.alarm.data.audio.AlarmAudioPlayer,
     getMissionsUseCase: GetMissionsUseCase
 ) : ViewModel() {
 
@@ -169,7 +172,37 @@ class AlarmEditViewModel @Inject constructor(
     }
 
     fun setSoundUri(soundUri: String) {
+        stopPreview()
         _state.value = _state.value.copy(soundUri = soundUri)
+    }
+
+    fun selectCustomDeviceAudio(uri: android.net.Uri) {
+        stopPreview()
+        viewModelScope.launch {
+            val savedInternalUriString = fileStorageManager.saveCustomAudioTone(uri)
+            _state.value = _state.value.copy(soundUri = savedInternalUriString)
+        }
+    }
+
+    fun selectSystemRingtone(uri: android.net.Uri) {
+        stopPreview()
+        _state.value = _state.value.copy(soundUri = uri.toString())
+    }
+
+    fun togglePreview() {
+        if (_state.value.isPreviewPlaying) {
+            stopPreview()
+        } else {
+            alarmAudioPlayer.playPreview(_state.value.soundUri, _state.value.volume)
+            _state.value = _state.value.copy(isPreviewPlaying = true)
+        }
+    }
+
+    fun stopPreview() {
+        alarmAudioPlayer.stopPreview()
+        if (_state.value.isPreviewPlaying) {
+            _state.value = _state.value.copy(isPreviewPlaying = false)
+        }
     }
 
     fun setVibrate(vibrate: Boolean) {
@@ -177,10 +210,15 @@ class AlarmEditViewModel @Inject constructor(
     }
 
     fun setVolume(volume: Float) {
-        _state.value = _state.value.copy(volume = volume.coerceIn(0f, 1f))
+        val clamped = volume.coerceIn(0f, 1f)
+        _state.value = _state.value.copy(volume = clamped)
+        if (_state.value.isPreviewPlaying) {
+            alarmAudioPlayer.playPreview(_state.value.soundUri, clamped)
+        }
     }
 
     fun saveAlarm() {
+        stopPreview()
         val s = _state.value
         val alarm = Alarm(
             id = s.id,
@@ -206,6 +244,7 @@ class AlarmEditViewModel @Inject constructor(
     }
 
     fun deleteAlarm() {
+        stopPreview()
         if (!_state.value.isEditMode) return
         val s = _state.value
         val alarm = Alarm(
@@ -218,5 +257,10 @@ class AlarmEditViewModel @Inject constructor(
             deleteAlarmUseCase(alarm)
             _saveSuccessEvent.emit(Unit)
         }
+    }
+
+    override fun onCleared() {
+        stopPreview()
+        super.onCleared()
     }
 }

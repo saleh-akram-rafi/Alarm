@@ -93,6 +93,40 @@ fun AlarmEditScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val availableMissions by viewModel.availableMissions.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            viewModel.stopPreview()
+        }
+    }
+
+    val customAudioPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.selectCustomDeviceAudio(uri)
+        }
+    }
+
+    val ringtonePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val pickedUri: android.net.Uri? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(
+                    android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                    android.net.Uri::class.java
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
+            if (pickedUri != null) {
+                viewModel.selectSystemRingtone(pickedUri)
+            }
+        }
+    }
 
     LaunchedEffect(alarmId) {
         viewModel.loadAlarm(alarmId)
@@ -476,18 +510,70 @@ fun AlarmEditScreen(
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Alarm Tone",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val isKafirSelected = state.soundUri.equals("Kafir.mp3", ignoreCase = true) ||
+                        state.soundUri.equals("kafir", ignoreCase = true) ||
+                        state.soundUri.contains("raw/kafir")
+                    val isSystemSelected = state.soundUri.equals("system", ignoreCase = true)
+                    val isCustomSelected = !isKafirSelected && !isSystemSelected
+                    val currentTuneName = remember(state.soundUri) {
+                        com.discipline.alarm.util.FileStorageManager.getSoundDisplayName(context, state.soundUri)
+                    }
+
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Alarm Tone",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Selected: $currentTuneName",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DisciplineAccent,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.togglePreview() },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (state.isPreviewPlaying) DisciplineError else DisciplineAccent
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (state.isPreviewPlaying) DisciplineError else DisciplineAccent
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (state.isPreviewPlaying) "Stop Test" else "Test Tune",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Built-in / Preset Options
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterChip(
-                            selected = state.soundUri == "Kafir.mp3" || state.soundUri == "kafir",
+                            selected = isKafirSelected,
                             onClick = { viewModel.setSoundUri("Kafir.mp3") },
                             label = { Text("Kafir.mp3 (Discipline)") },
                             colors = FilterChipDefaults.filterChipColors(
@@ -498,7 +584,7 @@ fun AlarmEditScreen(
                             )
                         )
                         FilterChip(
-                            selected = state.soundUri == "system",
+                            selected = isSystemSelected,
                             onClick = { viewModel.setSoundUri("system") },
                             label = { Text("System Alarm") },
                             colors = FilterChipDefaults.filterChipColors(
@@ -508,6 +594,84 @@ fun AlarmEditScreen(
                                 labelColor = TextSecondary
                             )
                         )
+                        if (isCustomSelected) {
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.togglePreview() },
+                                label = { Text("Custom: $currentTuneName") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = DisciplineAccent,
+                                    selectedLabelColor = DarkBackground,
+                                    containerColor = DarkSurfaceVariant,
+                                    labelColor = TextSecondary
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Custom Device Audio & Ringtone Picker Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.stopPreview()
+                                customAudioPickerLauncher.launch(arrayOf("audio/*"))
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DisciplinePrimary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = DisciplinePrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Device Audio (MP3)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.stopPreview()
+                                val intent = android.content.Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                    putExtra(
+                                        android.media.RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                        android.media.RingtoneManager.TYPE_ALARM or android.media.RingtoneManager.TYPE_RINGTONE
+                                    )
+                                    putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                    putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                    putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Select Alarm Tune")
+                                }
+                                ringtonePickerLauncher.launch(intent)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DisciplineAccent)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = DisciplineAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Phone Ringtones",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

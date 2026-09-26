@@ -105,8 +105,13 @@ fun AlarmCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val tuneLabel = androidx.compose.runtime.remember(alarm.soundUri) {
+                        com.discipline.alarm.util.FileStorageManager.getSoundDisplayName(context, alarm.soundUri)
+                    }
+
                     Text(
-                        text = alarm.repeatSummary,
+                        text = "${alarm.repeatSummary} • 🎵 $tuneLabel",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )

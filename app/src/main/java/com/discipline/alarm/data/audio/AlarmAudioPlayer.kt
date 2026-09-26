@@ -38,6 +38,7 @@ class AlarmAudioPlayer @Inject constructor(
     }
 
     private var exoPlayer: ExoPlayer? = null
+    private var previewPlayer: ExoPlayer? = null
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
 
@@ -59,8 +60,50 @@ class AlarmAudioPlayer @Inject constructor(
         }
     }
 
+    fun isPreviewPlaying(): Boolean {
+        return try {
+            previewPlayer?.isPlaying == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    fun playPreview(soundUriString: String?, volume: Float = 0.85f) {
+        stopPreview()
+        val soundUri = resolveSoundUri(soundUriString)
+        try {
+            val media3AudioAttributes = Media3AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build()
+
+            previewPlayer = ExoPlayer.Builder(context).build().apply {
+                setAudioAttributes(media3AudioAttributes, true)
+                repeatMode = Player.REPEAT_MODE_ONE
+                this.volume = volume.coerceIn(0.1f, 1.0f)
+                setMediaItem(MediaItem.fromUri(soundUri))
+                prepare()
+                play()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing preview audio", e)
+        }
+    }
+
+    fun stopPreview() {
+        try {
+            previewPlayer?.stop()
+            previewPlayer?.release()
+            previewPlayer = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping previewPlayer", e)
+        }
+    }
+
     @OptIn(UnstableApi::class)
     fun playAlarm(soundUriString: String?, targetVolume: Float = 1.0f, enableVibration: Boolean = true) {
+        stopPreview()
         if (isPlaying()) {
             Log.d(TAG, "Alarm audio is already playing continuously in background; keeping current playback.")
             if (enableVibration) {
@@ -85,6 +128,18 @@ class AlarmAudioPlayer @Inject constructor(
                 setAudioAttributes(media3AudioAttributes, false)
                 repeatMode = Player.REPEAT_MODE_ONE
                 volume = 0.15f // Initial soft volume for progressive fade-in
+
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        Log.w(TAG, "Custom sound URI failed (${error.message}), falling back to built-in Kafir.mp3")
+                        val fallbackUri = getDefaultKafirOrSystemUri()
+                        if (soundUri != fallbackUri) {
+                            setMediaItem(MediaItem.fromUri(fallbackUri))
+                            prepare()
+                            play()
+                        }
+                    }
+                })
 
                 val mediaItem = MediaItem.fromUri(soundUri)
                 setMediaItem(mediaItem)
@@ -118,6 +173,7 @@ class AlarmAudioPlayer @Inject constructor(
         Log.d(TAG, "Stopping alarm audio and vibration")
         fadeInJob?.cancel()
         fadeInJob = null
+        stopPreview()
 
         try {
             exoPlayer?.stop()
@@ -131,6 +187,16 @@ class AlarmAudioPlayer @Inject constructor(
         abandonAudioFocus()
     }
 
+    private fun getDefaultKafirOrSystemUri(): Uri {
+        val defaultRawId = context.resources.getIdentifier("kafir", "raw", context.packageName)
+        if (defaultRawId != 0) {
+            return Uri.parse("android.resource://${context.packageName}/$defaultRawId")
+        }
+        return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            ?: Uri.EMPTY
+    }
+
     private fun resolveSoundUri(soundUriString: String?): Uri {
         if (!soundUriString.isNullOrBlank()) {
             try {
@@ -138,27 +204,32 @@ class AlarmAudioPlayer @Inject constructor(
                     soundUriString.equals("kafir.mp3", ignoreCase = true) ||
                     soundUriString.contains("raw/kafir")
                 ) {
-                    val resId = context.resources.getIdentifier("kafir", "raw", context.packageName)
-                    if (resId != 0) {
-                        return Uri.parse("android.resource://${context.packageName}/$resId")
-                    }
+                    return getDefaultKafirOrSystemUri()
+                }
+                if (soundUriString.equals("system", ignoreCase = true)) {
+                    return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                        ?: getDefaultKafirOrSystemUri()
+                }
+                if (soundUriString.startsWith("/")) {
+                    val file = java.io.File(soundUriString)
+                    if (file.exists()) return Uri.fromFile(file)
                 }
                 val uri = Uri.parse(soundUriString)
-                if (uri != null) return uri
+                if (uri != null && !uri.scheme.isNullOrBlank()) {
+                    if (uri.scheme == "file") {
+                        val file = java.io.File(uri.path ?: "")
+                        if (file.exists()) return uri
+                    } else {
+                        return uri
+                    }
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to parse soundUri: $soundUriString, falling back to default", e)
             }
         }
 
-        // If kafir sound exists in raw resources, use as primary discipline alarm sound
-        val defaultRawId = context.resources.getIdentifier("kafir", "raw", context.packageName)
-        if (defaultRawId != 0) {
-            return Uri.parse("android.resource://${context.packageName}/$defaultRawId")
-        }
-
-        return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            ?: Uri.EMPTY
+        return getDefaultKafirOrSystemUri()
     }
 
     private fun startVibration() {
